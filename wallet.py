@@ -1,4 +1,5 @@
-from solana.keypair import Keypair
+from solders.keypair import Keypair
+
 import base58
 
 def create_wallet():
