@@ -29,13 +29,13 @@ def main():
             key = input("Введите приватный ключ: ")
             try:
                 current_wallet = wallet.load_wallet_from_private_key(key)
-                print("✅ Кошелёк импортирован. Адрес:", current_wallet.public_key)
+                print("✅ Кошелёк импортирован. Адрес:", current_wallet.pubkey())
             except Exception as e:
                 print("❌ Ошибка:", e)
 
         elif choice == "3":
             if current_wallet:
-                bal = solana_client.get_balance(str(current_wallet.public_key))
+                bal = solana_client.get_balance(str(current_wallet.pubkey()))
                 print(f"💰 Баланс: {bal:.6f} SOL")
             else:
                 print("Сначала создайте или импортируйте кошелёк")
@@ -46,7 +46,7 @@ def main():
                 amount = float(input("Сколько SOL отправить: "))
                 resp = solana_client.send_sol(current_wallet, to_addr, amount)
                 print("🚀 Отправлено. Ответ:", resp)
-                transaction_log.log_transaction(str(current_wallet.public_key), to_addr, amount, resp)
+                transaction_log.log_transaction(str(current_wallet.pubkey()), to_addr, amount, resp)
             else:
                 print("Сначала создайте или импортируйте кошелёк")
 
