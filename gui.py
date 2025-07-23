@@ -20,23 +20,32 @@ class SolanaWalletGUI:
         wallet_frame = tk.LabelFrame(self.root, text="Wallet", padx=10, pady=10)
         wallet_frame.pack(padx=10, pady=5, fill="x")
 
+        self.wallet_name_var = tk.StringVar()
+        tk.Label(wallet_frame, text="Wallet Name:").grid(row=0, column=0, sticky="e")
+        self.wallet_name_entry = tk.Entry(wallet_frame, textvariable=self.wallet_name_var, width=50)
+        self.wallet_name_entry.grid(row=0, column=1, padx=5)
+        self._add_paste_support(self.wallet_name_entry)
+
         self.pubkey_var = tk.StringVar()
         self.privkey_var = tk.StringVar()
 
-        tk.Label(wallet_frame, text="Public Key:").grid(row=0, column=0, sticky="e")
+        tk.Label(wallet_frame, text="Public Key:").grid(row=1, column=0, sticky="e")
         self.pubkey_entry = tk.Entry(wallet_frame, textvariable=self.pubkey_var, width=50)
-        self.pubkey_entry.grid(row=0, column=1, padx=5)
+        self.pubkey_entry.grid(row=1, column=1, padx=5)
         self._add_paste_support(self.pubkey_entry)
+        self._make_entry_clickable(self.pubkey_entry, 'Public key copied!')
 
-        tk.Label(wallet_frame, text="Private Key:").grid(row=1, column=0, sticky="e")
+        tk.Label(wallet_frame, text="Private Key:").grid(row=2, column=0, sticky="e")
         self.privkey_entry = tk.Entry(wallet_frame, textvariable=self.privkey_var, width=50)
-        self.privkey_entry.grid(row=1, column=1, padx=5)
+        self.privkey_entry.grid(row=2, column=1, padx=5)
         self._add_paste_support(self.privkey_entry)
+        self._make_entry_clickable(self.privkey_entry, 'Private key copied!')
 
         btn_frame = tk.Frame(wallet_frame)
-        btn_frame.grid(row=2, column=0, columnspan=2, pady=5)
+        btn_frame.grid(row=3, column=0, columnspan=2, pady=5)
         tk.Button(btn_frame, text="Create Wallet", command=self.create_wallet).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Import Wallet", command=self.import_wallet).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Import from File", command=self.import_wallet_from_file).pack(side="left", padx=5)
         tk.Button(btn_frame, text="Save Wallet", command=self.save_wallet).pack(side="left", padx=5)
 
         # Balance Frame
@@ -125,12 +134,31 @@ class SolanaWalletGUI:
         widget.bind('<Button-3>', show_menu)  # Windows/Linux
         widget.bind('<Button-2>', show_menu)  # macOS
 
+    def _make_entry_clickable(self, entry, message):
+        # On single left click, select all and copy to clipboard, then show a tooltip/messagebox
+        def on_click(event):
+            entry.selection_range(0, tk.END)
+            entry.clipboard_clear()
+            entry.clipboard_append(entry.get())
+            # Show a quick tooltip-like message (non-blocking)
+            self._show_temp_tooltip(entry, message)
+        entry.bind('<Button-1>', on_click)
+
+    def _show_temp_tooltip(self, widget, text, duration=1200):
+        # Show a small label below the widget for a short time
+        x = widget.winfo_rootx() - widget.winfo_toplevel().winfo_rootx()
+        y = widget.winfo_rooty() - widget.winfo_toplevel().winfo_rooty() + widget.winfo_height() + 2
+        tooltip = tk.Label(widget.master, text=text, bg='#ffffe0', relief='solid', borderwidth=1, font=("Arial", 9))
+        tooltip.place(x=x, y=y)
+        widget.after(duration, tooltip.destroy)
+
     def create_wallet(self):
         pub, priv = wallet.create_wallet()
         self.pubkey_var.set(pub)
         self.privkey_var.set(priv)
         self.current_wallet = wallet.load_wallet_from_private_key(priv)
         self.current_pubkey = pub
+        self.wallet_name_var.set("") # Leave blank for manual import
         messagebox.showinfo("Wallet Created", f"A new wallet has been created.\n\nPublic Key:\n{pub}\n\nPrivate Key:\n{priv}")
 
     def import_wallet(self):
@@ -144,9 +172,51 @@ class SolanaWalletGUI:
             self.privkey_var.set(priv)
             self.current_wallet = w
             self.current_pubkey = pub
+            self.wallet_name_var.set("")  # Leave blank for manual import
             messagebox.showinfo("Wallet Imported", f"Wallet imported successfully.\n\nPublic Key:\n{pub}")
         except Exception as e:
             messagebox.showerror("Import Error", f"Failed to import wallet:\n{e}")
+
+    def import_wallet_from_file(self):
+        file_path = filedialog.askopenfilename(
+            title="Select Private Key File",
+            filetypes=[('Text Files', '*.txt'), ('All Files', '*.*')]
+        )
+        if not file_path:
+            return
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = [line.strip() for line in f if line.strip()]
+            priv = None
+            pub = None
+            # Try to parse both formats
+            for line in lines:
+                if line.startswith('Private Key:'):
+                    priv = line.split('Private Key:')[1].strip()
+                elif line.startswith('Public Key:'):
+                    pub = line.split('Public Key:')[1].strip()
+            if not priv:
+                # Fallback: single-line file
+                if len(lines) == 1:
+                    priv = lines[0]
+            if not priv:
+                messagebox.showerror("Import Error", "No private key found in the selected file.")
+                return
+            w = wallet.load_wallet_from_private_key(priv)
+            if not pub:
+                pub = str(w.pubkey())
+            self.pubkey_var.set(pub)
+            self.privkey_var.set(priv)
+            self.current_wallet = w
+            self.current_pubkey = pub
+            # Set wallet name from filename (strip extension)
+            import os
+            base = os.path.basename(file_path)
+            name, _ = os.path.splitext(base)
+            self.wallet_name_var.set(name)
+            messagebox.showinfo("Wallet Imported", f"Wallet imported successfully from file.\n\nPublic Key:\n{pub}")
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Failed to import wallet from file:\n{e}")
 
     def save_wallet(self):
         pub = self.pubkey_var.get()
